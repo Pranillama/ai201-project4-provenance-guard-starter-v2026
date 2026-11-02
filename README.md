@@ -88,7 +88,7 @@ Success is HTTP 200:
 | `model_score` | number | Signal one, 0 to 1 |
 | `style_score` | number | Signal two, 0 to 1 |
 
-Failure is HTTP 400 when `text` is missing, empty, or longer than 8000 characters. The body is `error` set to `bad_input` and a short `message`. There is no `content_id`. The audit log gets a rejection line, not a decision.
+Failure is HTTP 400 when `text` is missing, empty, or longer than 8000 characters, and when `creator_id` is missing or blank. The body is `error` set to `bad_input` and a short `message`. There is no `content_id`. The audit log gets a rejection line, not a decision.
 
 `POST /appeal`
 
@@ -253,15 +253,15 @@ $ curl "http://127.0.0.1:5000/log?limit=2"
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* Five criteria, each with a number, covering false positives, score spread, whether all three labels can appear, the appeal path, and bad input. A wrong accusation had to cost more than a miss. I did not want the targets written so loose that they could not fail.
+- *What came back:* At most 1 of 10 ordinary human pieces labeled `ai`, in each of three trials. A combined-score gap of at least 0.20 on 4 of 5 AI-versus-human pairs. Each of the three guesses at least once in 6 submissions. 5 real appeals all reaching `under_review`, plus one unknown id returning 404. Three bad inputs, missing text, empty text, and 8001 characters, each HTTP 400 with no `decided` row.
+- *What I changed:* I kept those numbers and put them in `criteria.md` before the route scored anything. After signal one scored eight plain human sentences at 0.8863, I did not loosen the 1-in-10.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* What the combining rule should do when signal one says 0.8863 and signal two says 0.5673 on eight short sentences a person could have written. A plain average was about 0.73, which is the AI label.
+- *What came back:* Cap the average when the lower signal is under 0.60, so one signal cannot accuse by itself.
+- *What I changed:* I put that cap in `scoring.py::combine_signals`. The even sentences now score 0.6400, which is unsure. I then reran the clearly AI paragraph. It still scores 0.7539, so the cap did not flatten every piece into the middle. I left the label cuts at 0.35 and 0.65.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 

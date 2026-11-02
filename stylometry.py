@@ -49,7 +49,7 @@ def words(text: str) -> list[str]:
 
 def sentence_length_spread(text: str) -> float:
     """
-    How much sentence length varies. ← TODO
+    How much sentence length varies.
 
     Returns:
         A float. Decide yourself what scale it's on and which direction means
@@ -77,7 +77,7 @@ def sentence_length_spread(text: str) -> float:
 
 def type_token_ratio(text: str) -> float:
     """
-    Unique words over total words. ← TODO
+    Unique words over total words.
 
     Returns:
         A float between 0 and 1. Higher means more varied vocabulary.
@@ -95,7 +95,7 @@ def type_token_ratio(text: str) -> float:
 
 def punctuation_density(text: str) -> float:
     """
-    How much punctuation, relative to length. ← TODO
+    How much punctuation, relative to length.
 
     Returns:
         A float. Whether you count all punctuation or only some kinds — commas,
@@ -116,7 +116,7 @@ def punctuation_density(text: str) -> float:
 
 def style_signal(text: str) -> float:
     """
-    The style signal as a 0–1 score. **Higher means more likely AI.** ← TODO
+    The style signal as a 0–1 score. **Higher means more likely AI.**
 
     Combine your three measures into one number. Same direction as
     `detector.model_signal`, so that `scoring.combine_signals` can treat them
