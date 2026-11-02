@@ -36,52 +36,112 @@
 
 ## What This Does
 
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
+Provenance Guard is a small service a writing site can call when someone submits their own writing. The site sends the text. The service sends back a guess, a score, a sentence a reader can understand, and an id the writer can use to push back.
 
+A submission goes through seven steps.
 
+1. The text arrives at `POST /submit` as JSON with `text` and `creator_id`. If `text` is missing, empty, or only whitespace, the route stops. It returns HTTP 400 and writes a rejection to the audit log. There is no guess and no label, because there is nothing to judge. The same refusal happens when `text` is longer than 8000 characters. The model only reads about 400 tokens, so scoring a pasted novel would judge a short slice and present that slice as a judgment of the whole piece.
+
+2. The route makes a `content_id`. The appeal needs that id. Without it the writer has nothing to point at.
+
+3. Signal one runs. `detector.model_signal` asks a local GPT-2 model how predictable the text is. Text the model finds easy to predict scores higher. That number is `model_score`, from 0 to 1. Higher means more likely AI.
+
+4. Signal two runs. `stylometry.style_signal` does not read the text. It measures the shape: how much sentence length varies, unique words divided by total words, and how much punctuation there is. Those become `style_score`, also from 0 to 1, higher meaning more likely AI. This function is still a stub. Milestone 4 builds it.
+
+5. `scoring.combine_signals` turns the two scores into one confidence from 0 to 1. The rule is not chosen yet. I will write it down before coding it. A case where the two signals disagree is what that rule has to handle.
+
+6. `scoring.score_to_label` turns the confidence into a short guess, `human`, `unsure`, or `ai`, and a full sentence. The reader sees the sentence. The starter file currently cuts at 0.35 and 0.65. At or below 0.35 the label is high-confidence human. At or above 0.65 it is high-confidence AI. Between those cuts the label is unsure. Those cuts are placeholders until I decide where a wrong accusation should start.
+
+7. `audit.log_decision` appends one line to `logs/audit.jsonl`. The line has the time, the content id, the creator id, the guess, both signal scores, the combined score, the label, and status `decided`. The HTTP response carries `content_id`, `guess`, `confidence`, `label`, `model_score`, and `style_score`. A writer who thinks the label is wrong sends `POST /appeal` with that `content_id` and their reasoning. The original line stays. A new line sets the status to `under_review`. The service does not score the text again.
+
+### A false positive
+
+Say a student submits this, and they wrote every line.
+
+> I went to the library after class. I sat down and wrote my poem. It is about my mother and the kitchen at home. I wrote every line myself.
+
+The sentences are short and the words are common. Signal one measures predictability, so this kind of plain writing can score like machine writing. A `model_score` around 0.8 is the failure I am planning for. Signal two is still the stub, which returns 0.5, so an equal mix of 0.8 and 0.5 lands on 0.65. The placeholder cut treats 0.65 as high-confidence AI. The reader would see the AI label on a poem the person wrote.
+
+The writer can take the `content_id` from the response and `POST /appeal` with a reason. The log keeps the original decision and adds a line with status `under_review`. Nothing is re-scored. A person has to read the appeal.
+
+I have not run this paragraph through the model. The 0.8 is the case the thresholds have to survive, not a measured result. The sample scored during setup was different text, and that sample came back at 0.8864.
+
+### Endpoint contracts
+
+`POST /submit`
+
+Request fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `text` | string | The writing being judged |
+| `creator_id` | string | Who submitted it |
+
+Success is HTTP 200:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `content_id` | string | Id for a later appeal |
+| `guess` | string | `human`, `unsure`, or `ai` |
+| `confidence` | number | 0 to 1. Higher means more likely AI |
+| `label` | string | The full sentence a reader sees |
+| `model_score` | number | Signal one, 0 to 1 |
+| `style_score` | number | Signal two, 0 to 1 |
+
+Failure is HTTP 400 when `text` is missing, empty, or longer than 8000 characters. The body is `error` set to `bad_input` and a short `message`. There is no `content_id`. The audit log gets a rejection line, not a decision.
+
+`POST /appeal`
+
+Request fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `content_id` | string | From an earlier submit response |
+| `reasoning` | string | The writer's own words |
+
+Success is HTTP 200, and only if that `content_id` is already in the log:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `content_id` | string | The same id |
+| `status` | string | `under_review` |
+| `message` | string | A short confirmation that a person will look, and that the text was not scored again |
+
+The appeal does not send `creator_id`. The log copies `creator_id` from the original decision. The new log line has the time, `content_id`, `creator_id`, `event` set to `appeal`, `status` set to `under_review`, and `reasoning`. The original decision line is not overwritten.
+
+Missing `content_id` or empty `reasoning` is HTTP 400 with `error` set to `bad_input`. A `content_id` that is not in the log is HTTP 404 with `error` set to `not_found`, and no new log line.
+
+`POST /ping` and `GET /log` already work. I am not changing them.
 
 ---
 
 ## Signals and Scoring
 
-<!-- For each signal: what property it measures, why that might differ between
-     human and AI writing, and WHAT IT CAN'T SEE.
-
-     The blind spot is not optional. If you can't name it you don't understand
-     the signal yet — and unit 8's attack set is built out of blind spots. -->
-
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** How predictable the text is to a local GPT-2 model. `detector.model_signal` turns perplexity into a score from 0 to 1. Low perplexity means the model was not surprised, and the score goes up. Higher means more likely AI.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Text a model wrote is often text a model finds easy to continue. Common words in ordinary sentences are easy to predict.
 
-**What it can't see:**
+**What it can't see:** Predictability is not authorship. A person writing in a second language, a younger writer, or anyone who stays with words they are sure of will look predictable too. Dense writing with rare words often goes the other way and looks human, because the model fails to predict those words. The people this signal is most likely to accuse are the ones with the least room to argue.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The shape of the text, not what it says. Three measures in `stylometry.py`. `sentence_length_spread` is how much sentence length varies. `type_token_ratio` is unique words divided by total words. `punctuation_density` is how much punctuation there is relative to length. `style_signal` is supposed to combine them into one score from 0 to 1, higher meaning more likely AI. Those functions are stubs today.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Machine text often keeps a steadier sentence length and cleaner punctuation than a person drafting. Word variety can shift too. I am not treating that as settled until I run the same pieces through both signals in Milestone 4.
 
-**What it can't see:**
+**What it can't see:** It cannot read. Typos, broken sentences, and a pasted quotation change the shape and move the score without changing who wrote it. That is cheap to do on purpose.
 
 ### The combining rule
 
-<!-- Write the rule in words, then give the numbers. What happens when the two
-     signals disagree? -->
+**The rule:** Not chosen yet. Milestone 4. I will write the rule in words before I change the code. The starter currently averages the two scores. When the signals disagree, that average hides the disagreement in the middle. I have not decided whether that is what I want.
 
-**The rule:**
-
-**The numbers:**
+**The numbers:** Placeholder only. `WEIGHT_MODEL_SIGNAL` is 0.5 and `WEIGHT_STYLE_SIGNAL` is 0.5 in `config.py`. The label cuts in that same file are 0.35 and 0.65, also placeholders.
 
 **Where it lives:** `scoring.py::combine_signals`
 
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
-
-**A case where my two signals split, and what my rule does with it:**
+**A case where my two signals split, and what my rule does with it:** Not yet. Signal two does not vary yet, so there is no real split to record. The false-positive paragraph above is the case the rule has to be able to handle once both signals are real.
 
 
 
