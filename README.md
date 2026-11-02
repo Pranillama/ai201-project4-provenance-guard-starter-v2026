@@ -50,7 +50,7 @@ A submission goes through seven steps.
 
 5. `scoring.combine_signals` averages the two scores. If the lower score is under 0.60, the average is capped at 0.64, so one dissenting signal cannot produce a high-confidence AI label.
 
-6. `scoring.score_to_label` turns the confidence into a short guess, `human`, `unsure`, or `ai`, and a full sentence. The reader sees the sentence. At or below 0.35 the label is high-confidence human. At or above 0.65 it is high-confidence AI. Between those cuts the label is unsure. The sentences themselves are written in Milestone 5.
+6. `scoring.score_to_label` turns the confidence into a short guess, `human`, `unsure`, or `ai`, and a full sentence. The reader sees the sentence. At or below 0.35 the label is high-confidence human. At or above 0.65 it is high-confidence AI. Between those cuts the label is unsure.
 
 7. `audit.log_decision` appends one line to `logs/audit.jsonl`. The line has the time, the content id, the creator id, the guess, both signal scores, the combined score, the label, and status `decided`. The HTTP response carries `content_id`, `guess`, `confidence`, `label`, `model_score`, and `style_score`. A writer who thinks the label is wrong sends `POST /appeal` with that `content_id` and their reasoning. The original line stays. A new line sets the status to `under_review`. The service does not score the text again.
 
@@ -160,21 +160,15 @@ The same rule on typos does less than I wanted. Adding misspellings to the AI pa
 
 ## Label Variants
 
-<!-- The exact text of all three labels, as a reader would see them, and the
-     score range each covers.
-
-     Write them for someone who has never heard the word "threshold". -->
-
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 to 0.35, including 0.35 | We think a person wrote this. |
+| unsure | above 0.35 and below 0.65 | We can't tell whether a person wrote this or an AI did. If you wrote it, you can appeal, and a person will look. |
+| high-confidence AI | 0.65 to 1.00, including 0.65 | This looks more like an AI wrote it than a person working alone. |
 
-**Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
+**Why I worded the "unsure" one this way:** It says the service does not know. It says the writing may still be the person's. It says what they can do next. It does not say the writing looks suspicious.
+
+All three were reached. The bus note scored 0.3340 and came back `human`. The library poem scored 0.5859 and came back `unsure`. The bland framework paragraph scored 0.7539 and came back `ai`.
 
 
 
@@ -187,8 +181,6 @@ The same rule on typos does less than I wanted. Adding misspellings to the AI pa
 
 **A submission**
 
-Milestone 3, one signal only. `confidence`, `guess`, `label`, and `style_score` are still placeholders. The model score is real. The same poem scored 0.6661, which is above the placeholder AI cut of 0.65, so plain writing can already look like a machine to signal one.
-
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
@@ -197,12 +189,12 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 
 ```json
 {
-  "confidence": null,
-  "content_id": "ff6c79cd6f8f4d269434af9f76ce1a9a",
-  "guess": "unset",
-  "label": "Label not written yet.",
+  "confidence": 0.5859,
+  "content_id": "f9fc58197b4d4bdd87c0bff86427418f",
+  "guess": "unsure",
+  "label": "We can't tell whether a person wrote this or an AI did. If you wrote it, you can appeal, and a person will look.",
   "model_score": 0.6661,
-  "style_score": null
+  "style_score": 0.5058
 }
 ```
 
@@ -211,21 +203,48 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+  -d '{"content_id": "f9fc58197b4d4bdd87c0bff86427418f", "reasoning": "I wrote every line of that poem myself."}'
 ```
 
 ```json
-
+{
+  "content_id": "f9fc58197b4d4bdd87c0bff86427418f",
+  "message": "A person will look at this. The text was not scored again.",
+  "status": "under_review"
+}
 ```
 
 **What the log shows afterwards**
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+$ curl "http://127.0.0.1:5000/log?limit=2"
 ```
 
 ```json
-
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.5859,
+      "content_id": "f9fc58197b4d4bdd87c0bff86427418f",
+      "creator_id": "ada",
+      "guess": "unsure",
+      "label": "We can't tell whether a person wrote this or an AI did. If you wrote it, you can appeal, and a person will look.",
+      "model_score": 0.6661,
+      "status": "decided",
+      "style_score": 0.5058,
+      "timestamp": "2026-11-02T16:05:54+00:00"
+    },
+    {
+      "content_id": "f9fc58197b4d4bdd87c0bff86427418f",
+      "creator_id": "ada",
+      "event": "appeal",
+      "reasoning": "I wrote every line of that poem myself.",
+      "status": "under_review",
+      "timestamp": "2026-11-02T16:05:59+00:00"
+    }
+  ]
+}
 ```
 
 ---
