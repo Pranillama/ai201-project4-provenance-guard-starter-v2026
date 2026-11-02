@@ -31,6 +31,8 @@ from flask import Flask, jsonify, request
 import audit
 import config
 import detector
+import scoring
+import stylometry
 
 app = Flask(__name__)
 
@@ -240,26 +242,27 @@ def submit():
         audit.log_rejection(creator_id, "detector unavailable")
         return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
 
+    style_score = stylometry.style_signal(text)
+    confidence = scoring.combine_signals(model_score, style_score)
     content_id = uuid.uuid4().hex
-    # Milestone 3: one real signal. Confidence, label, and style stay
-    # placeholders until the second signal and the label text exist.
+    # Label text is still the milestone 5 sentence. The score is real.
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
         guess="unset",
         model_score=model_score,
-        style_score=None,
-        combined_score=None,
+        style_score=style_score,
+        combined_score=confidence,
         label="Label not written yet.",
         status="decided",
     )
     return jsonify({
         "content_id": content_id,
         "guess": "unset",
-        "confidence": None,
+        "confidence": confidence,
         "label": "Label not written yet.",
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
     })
 
 

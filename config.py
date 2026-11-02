@@ -61,6 +61,11 @@ MAX_TEXT_CHARS = 8000
 WEIGHT_MODEL_SIGNAL = 0.5
 WEIGHT_STYLE_SIGNAL = 0.5
 
+# Both signals have to be at least this high before a score may cross
+# AI_THRESHOLD. Below that, one signal is not actually voting "AI", and the
+# average is capped under the AI cut. Disagreement stays in the unsure band.
+AGREEMENT_FLOOR = 0.60
+
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
 # Where one label becomes another. Scores run 0.0 (confidently human) to 1.0

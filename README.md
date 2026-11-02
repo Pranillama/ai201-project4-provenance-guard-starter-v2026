@@ -46,11 +46,11 @@ A submission goes through seven steps.
 
 3. Signal one runs. `detector.model_signal` asks a local GPT-2 model how predictable the text is. Text the model finds easy to predict scores higher. That number is `model_score`, from 0 to 1. Higher means more likely AI.
 
-4. Signal two runs. `stylometry.style_signal` does not read the text. It measures the shape: how much sentence length varies, unique words divided by total words, and how much punctuation there is. Those become `style_score`, also from 0 to 1, higher meaning more likely AI. This function is still a stub. Milestone 4 builds it.
+4. Signal two runs. `stylometry.style_signal` does not read the text. It measures the shape: how much sentence length varies, unique words divided by total words, and how much punctuation there is. Those become `style_score`, also from 0 to 1, higher meaning more likely AI.
 
-5. `scoring.combine_signals` turns the two scores into one confidence from 0 to 1. The rule is not chosen yet. I will write it down before coding it. A case where the two signals disagree is what that rule has to handle.
+5. `scoring.combine_signals` averages the two scores. If the lower score is under 0.60, the average is capped at 0.64, so one dissenting signal cannot produce a high-confidence AI label.
 
-6. `scoring.score_to_label` turns the confidence into a short guess, `human`, `unsure`, or `ai`, and a full sentence. The reader sees the sentence. The starter file currently cuts at 0.35 and 0.65. At or below 0.35 the label is high-confidence human. At or above 0.65 it is high-confidence AI. Between those cuts the label is unsure. Those cuts are placeholders until I decide where a wrong accusation should start.
+6. `scoring.score_to_label` turns the confidence into a short guess, `human`, `unsure`, or `ai`, and a full sentence. The reader sees the sentence. At or below 0.35 the label is high-confidence human. At or above 0.65 it is high-confidence AI. Between those cuts the label is unsure. The sentences themselves are written in Milestone 5.
 
 7. `audit.log_decision` appends one line to `logs/audit.jsonl`. The line has the time, the content id, the creator id, the guess, both signal scores, the combined score, the label, and status `decided`. The HTTP response carries `content_id`, `guess`, `confidence`, `label`, `model_score`, and `style_score`. A writer who thinks the label is wrong sends `POST /appeal` with that `content_id` and their reasoning. The original line stays. A new line sets the status to `under_review`. The service does not score the text again.
 
@@ -60,11 +60,11 @@ Say a student submits this, and they wrote every line.
 
 > I went to the library after class. I sat down and wrote my poem. It is about my mother and the kitchen at home. I wrote every line myself.
 
-The sentences are short and the words are common. Signal one measures predictability, so this kind of plain writing can score like machine writing. I have now scored this paragraph. Signal one returns `model_score` 0.6661. Signal two is still the stub, which returns 0.5, so an equal mix of 0.6661 and 0.5 lands on about 0.58, inside the placeholder unsure band. The model score alone is already above the placeholder AI cut of 0.65. If the label followed signal one by itself, the reader would see the AI label on a poem the person wrote.
+The sentences are short and the words are common. Signal one measures predictability, so this kind of plain writing can score like machine writing. Signal one returns 0.6661 on this poem. Signal two returns 0.5058, because the text is too short for word variety to count and there is no comma or dash. The average is 0.5859. The lower signal is under 0.60, so the score stays in the unsure band. Signal one alone is already over 0.65. If the label followed only the model, the reader would see an AI label on a poem the person wrote.
 
 The writer can take the `content_id` from the response and `POST /appeal` with a reason. The log keeps the original decision and adds a line with status `under_review`. Nothing is re-scored. A person has to read the appeal.
 
-The setup sample, which was bland generated prose, came back at 0.8864. This poem came back at 0.6661. Both are high. The thresholds have to keep a poem at 0.6661 from being called high-confidence AI just because the sentences are short.
+A harder version of the same mistake is eight short human sentences, "I walked to the store. I bought some bread," and so on. Signal one scores that 0.8863. Signal two scores it 0.5673. A plain average is about 0.73, which would be the AI label. The agreement rule caps it at 0.64, so the label stays unsure. That cap is the decision. Some edited AI text will also stay unsure, and that is the cost.
 
 ### Endpoint contracts
 
@@ -127,21 +127,32 @@ Missing `content_id` or empty `reasoning` is HTTP 400 with `error` set to `bad_i
 
 ### Signal two — the style signal
 
-**What it measures:** The shape of the text, not what it says. Three measures in `stylometry.py`. `sentence_length_spread` is how much sentence length varies. `type_token_ratio` is unique words divided by total words. `punctuation_density` is how much punctuation there is relative to length. `style_signal` is supposed to combine them into one score from 0 to 1, higher meaning more likely AI. Those functions are stubs today.
+**What it measures:** The shape of the text, not what it says. Three measures in `stylometry.py`, averaged into `style_signal`. Higher means more likely AI. `sentence_length_spread` is the standard deviation of sentence lengths divided by the mean. Low spread points toward AI, so the score flips it. One sentence has no spread and counts as the even case. `type_token_ratio` is unique words divided by total words. Under 40 words this measure is ignored and contributes 0.5, because a short text looks varied just by being short. On longer text, a ratio near 0.45 points toward AI and a ratio near 0.85 points toward a person. `punctuation_density` counts commas, semicolons, colons, and dashes per word, not full stops. About 0.08 marks per word points toward AI. Bare text and heavily punctuated text point toward a person.
 
-**Why that might differ between human and AI writing:** Machine text often keeps a steadier sentence length and cleaner punctuation than a person drafting. Word variety can shift too. I am not treating that as settled until I run the same pieces through both signals in Milestone 4.
+**Why that might differ between human and AI writing:** Generated prose tends toward even, mid-length sentences. A person is lumpier, a short sentence next to a long one. On the four calibration pieces that showed up. Clearly AI text scored style 0.6170. A lumpy human note scored 0.2712. Formal human writing scored 0.4223. Lightly edited AI scored 0.5154.
 
 **What it can't see:** It cannot read. Typos, broken sentences, and a pasted quotation change the shape and move the score without changing who wrote it. That is cheap to do on purpose.
 
 ### The combining rule
 
-**The rule:** Not chosen yet. Milestone 4. I will write the rule in words before I change the code. The starter currently averages the two scores. When the signals disagree, that average hides the disagreement in the middle. I have not decided whether that is what I want.
+**The rule:** Average the two scores, equal weights. Both already point the same way. Higher means more likely AI. If the lower score is under 0.60, cap the average at 0.64. One signal that is not actually on the AI side of 0.60 cannot drag the result into the high-confidence AI band. The label then stays unsure, or human if the average is low enough.
 
-**The numbers:** Placeholder only. `WEIGHT_MODEL_SIGNAL` is 0.5 and `WEIGHT_STYLE_SIGNAL` is 0.5 in `config.py`. The label cuts in that same file are 0.35 and 0.65, also placeholders.
+**The numbers:** `WEIGHT_MODEL_SIGNAL` 0.5, `WEIGHT_STYLE_SIGNAL` 0.5, `AGREEMENT_FLOOR` 0.60, cap 0.64. Label cuts stay 0.35 and 0.65. All of those live in `config.py`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
-**A case where my two signals split, and what my rule does with it:** Not yet. Signal two does not vary yet, so there is no real split to record. The false-positive paragraph above is the case the rule has to be able to handle once both signals are real.
+**A case where my two signals split, and what my rule does with it:** Eight short sentences a person could write. "I walked to the store. I bought some bread. I walked back home. I made some toast. I sat at the table. I ate the toast. I washed the plate. I went to my room." Signal one scores 0.8863. Signal two scores 0.5673. The plain average is about 0.73, over the AI cut. The style score is under 0.60, so `combine_signals` returns 0.6400 and the label stays unsure.
+
+The same rule on typos does less than I wanted. Adding misspellings to the AI paragraph drops signal one from 0.8907 to 0.2406, because the model is surprised by the odd words, while signal two stays 0.6170, because the sentence lengths did not change. The average is 0.4288, which is unsure. Typos fool the model. The style signal cannot read, so it does not notice them either. Neither signal gets to call that text AI on its own, and neither calls it human.
+
+| Piece | model_score | style_score | combined |
+|---|---|---|---|
+| Clearly AI | 0.8907 | 0.6170 | 0.7539 |
+| Clearly human | 0.3969 | 0.2712 | 0.3340 |
+| Formal human | 0.3788 | 0.4223 | 0.4006 |
+| Lightly edited AI | 0.5274 | 0.5154 | 0.5214 |
+| Plain poem | 0.6661 | 0.5058 | 0.5859 |
+| Even human sentences | 0.8863 | 0.5673 | 0.6400 |
 
 
 

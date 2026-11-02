@@ -64,8 +64,15 @@ def sentence_length_spread(text: str) -> float:
     `stdev` raises on fewer than two values. Decide what that should return
     before the attack set decides for you.
     """
-    # TODO: replace this
-    return 0.0
+    lengths = [len(words(sentence)) for sentence in sentences(text)]
+    lengths = [n for n in lengths if n > 0]
+    # One sentence has no spread. That is the even, machine-like case.
+    if len(lengths) < 2:
+        return 0.0
+    mean = statistics.mean(lengths)
+    if mean == 0:
+        return 0.0
+    return statistics.stdev(lengths) / mean
 
 
 def type_token_ratio(text: str) -> float:
@@ -80,8 +87,10 @@ def type_token_ratio(text: str) -> float:
     directly comparable on it, and if your test inputs vary a lot in length,
     that alone can look like a signal.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return 0.0
+    return len(set(tokens)) / len(tokens)
 
 
 def punctuation_density(text: str) -> float:
@@ -94,8 +103,13 @@ def punctuation_density(text: str) -> float:
         more interesting than full stops, because they vary more between
         writers.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return 0.0
+    # Commas, semicolons, colons, and dashes. Full stops are in every sentence,
+    # so they barely separate anyone.
+    marks = len(re.findall(r"[,;:\u2014\u2013-]", text))
+    return marks / len(tokens)
 
 
 # ── Combining them ───────────────────────────────────────────────────────────
@@ -122,8 +136,28 @@ def style_signal(text: str) -> float:
     you trust it. Plain and ordinary, not formal: formal prose reads as *human*
     to signal one, and it is plain writing that gets accused.
     """
-    # TODO: replace this
-    return 0.5
+    def clip(value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+    # Low spread means sentences march in step. That points toward AI.
+    # A coefficient of variation around 0.9 is lumpy enough to count as human.
+    spread_ai = clip(1.0 - sentence_length_spread(text) / 0.9)
+
+    tokens = words(text)
+    if len(tokens) < 40:
+        # Short texts sit near a type-token ratio of 1 just because they are short.
+        variety_ai = 0.5
+    else:
+        # 0.85 varied, 0.45 repetitive. Repetition points toward AI.
+        variety_ai = clip((0.85 - type_token_ratio(text)) / 0.40)
+
+    # Neat conventional punctuation, about 0.08 marks per word, points toward AI.
+    # Bare text and heavily punctuated text point toward a person.
+    distance = abs(punctuation_density(text) - 0.08)
+    punct_ai = clip(1.0 - distance / 0.12)
+
+    score = (spread_ai + variety_ai + punct_ai) / 3
+    return round(score, 4)
 
 
 if __name__ == "__main__":
@@ -139,4 +173,3 @@ if __name__ == "__main__":
     print(f"type_token_ratio         {type_token_ratio(text)}")
     print(f"punctuation_density      {punctuation_density(text)}")
     print(f"style_signal             {style_signal(text)}   (higher = more likely AI)")
-    print("\nAll zeros? These are stubs — Milestone 4 is where you build them.")

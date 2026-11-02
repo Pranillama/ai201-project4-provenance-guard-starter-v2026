@@ -52,11 +52,15 @@ def combine_signals(model_score: float, style_score: float) -> float:
     The weights in config.py are placeholders. Change them, or ignore them and
     write a different rule.
     """
-    # TODO: replace this
-    return (
+    blended = (
         config.WEIGHT_MODEL_SIGNAL * model_score
         + config.WEIGHT_STYLE_SIGNAL * style_score
     )
+    # One signal under the floor is a dissent. Do not let that average
+    # become a high-confidence AI label.
+    if min(model_score, style_score) < config.AGREEMENT_FLOOR:
+        blended = min(blended, config.AI_THRESHOLD - 0.01)
+    return round(min(max(blended, 0.0), 1.0), 4)
 
 
 def score_to_label(score: float) -> tuple[str, str]:
