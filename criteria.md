@@ -42,61 +42,43 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. False positives on ordinary human writing
 
-<!-- Your criterion. It must name a number. -->
+Of 10 pieces of ordinary human writing I submit, at most 1 comes back with guess `ai`, in each of three trials.
 
-
-
-**Why this target:**
-
-
+**Why this target:** On a writing site a wrong accusation costs the writer more than a missed AI submission costs the site. One in ten is the most I would accept if the writing were mine. Zero would pretend the model does not flag plain sentences. Three in ten is a system I would not want on my own work. Unit 8 runs three trials, and the model score can move, so the target has to hold in all three.
 
 ---
 
-## 2.
+## 2. Score spread
 
-<!-- Your criterion. -->
+On 5 pairs of clearly AI text and clearly human text, the combined score of the AI piece is at least 0.20 higher than the human piece in at least 4 of the 5 pairs, in each of three trials.
 
-
-
-**Why this target:**
-
-
+**Why this target:** If those two kinds of text land on the same number, the three labels are names for one score. A gap of 0.20 is visible in the JSON. A gap of 0.05 would pass even when the signals barely move, and that target would be too easy to miss failing.
 
 ---
 
-## 3.
+## 3. Label coverage
 
-<!-- Your criterion. -->
+In one set of 6 submissions I choose, each of the three guesses `human`, `unsure`, and `ai` appears at least once.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A label no score can reach is a sentence in the README that the service never shows a reader. Six submissions is enough to aim two at each band. If one guess is missing, the ranges have a gap.
 
 ---
 
-## 4.
+## 4. The appeal path
 
-<!-- Your criterion. -->
+Of 5 appeals sent with a `content_id` that already exists in the log, all 5 return status `under_review`, and all 5 append a log line whose `reasoning` is the text that was sent. One appeal sent with a `content_id` that is not in the log returns HTTP 404 and appends no log line.
 
-
-
-**Why this target:**
-
-
+**Why this target:** The appeal is the only thing a writer can do after a wrong label. If it fails quietly, the false positive in the trace has no way out. Five is enough to see that it is not a one-off. The 404 case is there because a typo in the id looks like a broken endpoint when the log simply has no such row.
 
 ---
 
-## 5.
+## 5. Bad input
 
-<!-- Your criterion. -->
+Three requests, one with `text` missing, one with `text` empty or only whitespace, and one with `text` of 8001 characters, each return HTTP 400. None of the three appends a log entry with status `decided`.
 
-
-
-**Why this target:**
+**Why this target:** The trace refuses those three cases. The model only reads about 400 tokens, so scoring a long paste would judge a slice and present it as a judgment of the whole piece. A 500, or a `decided` row on empty text, means the route crashed or invented a judgment. All three have to fail the same way, or the contract is not the one I wrote.
 
 
 
