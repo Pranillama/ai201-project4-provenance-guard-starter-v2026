@@ -1,0 +1,6 @@
+{"timestamp": "2026-11-02T16:02:28+00:00", "creator_id": "ada", "event": "rejected", "status": "rejected", "reason": "text is missing or empty"}
+{"timestamp": "2026-11-02T16:02:28+00:00", "creator_id": "ada", "event": "rejected", "status": "rejected", "reason": "text is missing or empty"}
+{"timestamp": "2026-11-02T16:02:28+00:00", "creator_id": "ada", "event": "rejected", "status": "rejected", "reason": "text is longer than 8000 characters"}
+{"timestamp": "2026-11-02T16:02:28+00:00", "creator_id": "unknown", "event": "rejected", "status": "rejected", "reason": "creator_id is required"}
+{"timestamp": "2026-11-02T16:02:33+00:00", "content_id": "ce7a40426d354dfda1d4a847a2def0ba", "creator_id": "ada", "guess": "unset", "model_score": 0.6661, "style_score": null, "combined_score": null, "label": "Label not written yet.", "status": "decided"}
+{"timestamp": "2026-11-02T16:02:57+00:00", "content_id": "ff6c79cd6f8f4d269434af9f76ce1a9a", "creator_id": "ada", "guess": "unset", "model_score": 0.6661, "style_score": null, "combined_score": null, "label": "Label not written yet.", "status": "decided"}

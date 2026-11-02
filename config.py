@@ -46,6 +46,10 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 # 300 words, which is enough for the signal to mean something.
 DETECTOR_MAX_TOKENS = 400
 
+# The route refuses text longer than this. The model only reads about 400
+# tokens, so scoring a pasted novel would judge a slice and call it the piece.
+MAX_TEXT_CHARS = 8000
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.

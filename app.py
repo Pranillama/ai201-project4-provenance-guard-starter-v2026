@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import detector
 
 app = Flask(__name__)
 
@@ -200,16 +201,66 @@ def submit():
     a malformed input is one of the most common real failures there is.
     """
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        audit.log_rejection("unknown", "body was not a JSON object")
+        return jsonify({
+            "error": "bad_input",
+            "message": "body was not a JSON object.",
+        }), 400
 
-    # TODO: delete this and build the route.
+    raw_creator = payload.get("creator_id")
+    if not isinstance(raw_creator, str) or not raw_creator.strip():
+        audit.log_rejection("unknown", "creator_id is required")
+        return jsonify({
+            "error": "bad_input",
+            "message": "creator_id is required.",
+        }), 400
+    creator_id = raw_creator.strip()
+
+    text = payload.get("text", None)
+    if not isinstance(text, str) or not text.strip():
+        audit.log_rejection(creator_id, "text is missing or empty")
+        return jsonify({
+            "error": "bad_input",
+            "message": "text is missing or empty.",
+        }), 400
+    if len(text) > config.MAX_TEXT_CHARS:
+        audit.log_rejection(creator_id, "text is longer than 8000 characters")
+        return jsonify({
+            "error": "bad_input",
+            "message": "text is longer than 8000 characters.",
+        }), 400
+
+    try:
+        model_score = detector.model_signal(text)
+    except ValueError as exc:
+        audit.log_rejection(creator_id, str(exc))
+        return jsonify({"error": "bad_input", "message": str(exc)}), 400
+    except detector.DetectorUnavailable as exc:
+        audit.log_rejection(creator_id, "detector unavailable")
+        return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
+
+    content_id = uuid.uuid4().hex
+    # Milestone 3: one real signal. Confidence, label, and style stay
+    # placeholders until the second signal and the label text exist.
+    audit.log_decision(
+        content_id=content_id,
+        creator_id=creator_id,
+        guess="unset",
+        model_score=model_score,
+        style_score=None,
+        combined_score=None,
+        label="Label not written yet.",
+        status="decided",
+    )
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /submit isn't built yet — see the TODO in app.py.",
-        "you_sent": {
-            "text_length": len(payload.get("text", "")),
-            "creator_id": payload.get("creator_id"),
-        },
-    }), 501
+        "content_id": content_id,
+        "guess": "unset",
+        "confidence": None,
+        "label": "Label not written yet.",
+        "model_score": model_score,
+        "style_score": None,
+    })
 
 
 @app.post("/appeal")

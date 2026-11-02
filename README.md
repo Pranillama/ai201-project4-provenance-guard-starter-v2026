@@ -60,11 +60,11 @@ Say a student submits this, and they wrote every line.
 
 > I went to the library after class. I sat down and wrote my poem. It is about my mother and the kitchen at home. I wrote every line myself.
 
-The sentences are short and the words are common. Signal one measures predictability, so this kind of plain writing can score like machine writing. A `model_score` around 0.8 is the failure I am planning for. Signal two is still the stub, which returns 0.5, so an equal mix of 0.8 and 0.5 lands on 0.65. The placeholder cut treats 0.65 as high-confidence AI. The reader would see the AI label on a poem the person wrote.
+The sentences are short and the words are common. Signal one measures predictability, so this kind of plain writing can score like machine writing. I have now scored this paragraph. Signal one returns `model_score` 0.6661. Signal two is still the stub, which returns 0.5, so an equal mix of 0.6661 and 0.5 lands on about 0.58, inside the placeholder unsure band. The model score alone is already above the placeholder AI cut of 0.65. If the label followed signal one by itself, the reader would see the AI label on a poem the person wrote.
 
 The writer can take the `content_id` from the response and `POST /appeal` with a reason. The log keeps the original decision and adds a line with status `under_review`. Nothing is re-scored. A person has to read the appeal.
 
-I have not run this paragraph through the model. The 0.8 is the case the thresholds have to survive, not a measured result. The sample scored during setup was different text, and that sample came back at 0.8864.
+The setup sample, which was bland generated prose, came back at 0.8864. This poem came back at 0.6661. Both are high. The thresholds have to keep a poem at 0.6661 from being called high-confidence AI just because the sentences are short.
 
 ### Endpoint contracts
 
@@ -176,19 +176,23 @@ Missing `content_id` or empty `reasoning` is HTTP 400 with `error` set to `bad_i
 
 **A submission**
 
-<!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
+Milestone 3, one signal only. `confidence`, `guess`, `label`, and `style_score` are still placeholders. The model score is real. The same poem scored 0.6661, which is above the placeholder AI cut of 0.65, so plain writing can already look like a machine to signal one.
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text": "I went to the library after class. I sat down and wrote my poem. It is about my mother and the kitchen at home. I wrote every line myself.", "creator_id": "ada"}'
 ```
 
 ```json
-
+{
+  "confidence": null,
+  "content_id": "ff6c79cd6f8f4d269434af9f76ce1a9a",
+  "guess": "unset",
+  "label": "Label not written yet.",
+  "model_score": 0.6661,
+  "style_score": null
+}
 ```
 
 **An appeal**
